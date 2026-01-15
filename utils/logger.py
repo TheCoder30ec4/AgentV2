@@ -137,16 +137,18 @@ class RichLogger:
         self,
         manager: FileTrackingManager,
         context: Optional[Dict[str, Any]] = None,
+        verbose: bool = True,
     ):
         self.manager = manager
         self.context = context or {}
+        self.verbose = verbose
 
     # ------------------------------------------------------------------
     # CONTEXT
     # ------------------------------------------------------------------
 
     def bind(self, **kwargs) -> "RichLogger":
-        return RichLogger(self.manager, {**self.context, **kwargs})
+        return RichLogger(self.manager, {**self.context, **kwargs}, verbose=self.verbose)
 
     # ------------------------------------------------------------------
     # CORE LOGGING
@@ -233,18 +235,20 @@ class RichLogger:
         }
         border_style = border_styles.get(level, "cyan")
 
-        with _lock:
-            console.print()  # Spacing before
-            console.print(
-                Panel(
-                    content,
-                    title=f"[{border_style}]{event.upper().replace('_', ' ')}[/{border_style}]",
-                    border_style=border_style,
-                    box=box.ROUNDED,
-                    padding=(1, 2),
+        # Only print to console if verbose is True
+        if self.verbose:
+            with _lock:
+                console.print()  # Spacing before
+                console.print(
+                    Panel(
+                        content,
+                        title=f"[{border_style}]{event.upper().replace('_', ' ')}[/{border_style}]",
+                        border_style=border_style,
+                        box=box.ROUNDED,
+                        padding=(1, 2),
+                    )
                 )
-            )
-            console.print()  # Spacing after
+                console.print()  # Spacing after
 
     # ------------------------------------------------------------------
     # LEVEL HELPERS
@@ -270,6 +274,8 @@ class RichLogger:
     # ------------------------------------------------------------------
 
     def panel(self, content: str, title: str = "", style: str = "cyan"):
+        if not self.verbose:
+            return
         with _lock:
             console.print()
             console.print(
@@ -284,6 +290,8 @@ class RichLogger:
             console.print()
 
     def table(self, data: Dict[str, Any], title: str = ""):
+        if not self.verbose:
+            return
         table = Table(
             title=title, box=box.ROUNDED, show_header=True, header_style="bold magenta"
         )
@@ -306,6 +314,8 @@ class RichLogger:
         syntax = Syntax(
             json.dumps(data, indent=2), "json", theme="monokai", line_numbers=False
         )
+        if not self.verbose:
+            return
         with _lock:
             console.print()
             if title:
@@ -332,6 +342,8 @@ class RichLogger:
 
     def divider(self, title: str = "", style: str = "dim"):
         """Print a horizontal divider line."""
+        if not self.verbose:
+            return
         with _lock:
             if title:
                 console.rule(title, style=style)
@@ -341,6 +353,8 @@ class RichLogger:
 
     def section(self, title: str, style: str = "bold cyan"):
         """Print a section header."""
+        if not self.verbose:
+            return
         with _lock:
             console.print()
             console.rule(f"[{style}]{title}[/{style}]", style=style)
@@ -352,6 +366,8 @@ class RichLogger:
 
     def subheader(self, title: str, style: str = "dim cyan"):
         """Print a subsection header."""
+        if not self.verbose:
+            return
         with _lock:
             console.print()
             text = Text(title, style=style)
@@ -360,6 +376,8 @@ class RichLogger:
 
     def todo_list(self, todos: list, title: str = ""):
         """Display a list of todo items in a formatted table."""
+        if not self.verbose:
+            return
         if not todos:
             return
 
@@ -400,8 +418,9 @@ _manager = FileTrackingManager()
 logger = RichLogger(_manager)
 
 
-def get_logger() -> RichLogger:
-    return logger
+def get_logger(verbose: bool = True) -> RichLogger:
+    """Get a logger instance with optional verbose control."""
+    return RichLogger(_manager, verbose=verbose)
 
 
 def log_transition(from_module: str, to_module: str):

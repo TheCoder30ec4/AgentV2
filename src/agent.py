@@ -13,8 +13,6 @@ from utils.logger import get_logger
 from utils.Prompts import get_prompt
 from utils.validators import BackendTodoValidator, DomainTodoValidator
 
-logger = get_logger()
-
 # Sentinel to distinguish "not provided" from "explicitly None"
 _DEFAULT_DOMAIN_VALIDATOR = object()
 
@@ -51,8 +49,13 @@ class Agent:
         tools: Optional[Dict[str, Callable]] = None,
         session_store: Optional[SessionStore] = None,
         domain_validator: Optional[DomainTodoValidator] = _DEFAULT_DOMAIN_VALIDATOR,
+        verbose: bool = True,
     ):
-        logger.info(
+        self.verbose = verbose
+        # Create a logger instance with verbose control
+        self.logger = get_logger(verbose=verbose)
+        
+        self.logger.info(
             "agent_initializing",
             model=model,
             session_id=session_id,
@@ -78,6 +81,7 @@ class Agent:
             model=model,
             system_prompt=system_prompt,
             api_base=api_base,
+            verbose=self.verbose,
         )
         self.tools = tools or {}
         # Store domain validator (can be None to disable domain validation)
@@ -93,7 +97,7 @@ class Agent:
         # This is stored in session memory for future use
         self.session_facts: Dict[str, str] = {}
 
-        logger.success("agent_initialized", session_id=session_id)
+        self.logger.success("agent_initialized", session_id=session_id)
 
     # ---------------------------------------------------------
     # Public API
@@ -156,8 +160,8 @@ Instructions:
         # 2. Check cache - if exact match, return immediately (no LLM calls)
         cached_reply = self._session.get_cached_reply(normalized_task)
         if cached_reply is not None:
-            logger.divider("CACHE HIT", style="green")
-            logger.success(
+            self.logger.divider("CACHE HIT", style="green")
+            self.logger.success(
                 "agent_cache_hit",
                 session_id=self.session_id,
                 task_preview=(
@@ -173,8 +177,8 @@ Instructions:
             return memory
 
         # 3. Cache miss - proceed with full execution
-        logger.divider("AGENT RUN STARTED")
-        logger.info(
+        self.logger.divider("AGENT RUN STARTED")
+        self.logger.info(
             "agent_run_started",
             session_id=self.session_id,
             task_preview=task[:80] + "..." if len(task) > 80 else task,
@@ -187,15 +191,15 @@ Instructions:
         task_with_context = self._add_session_header(task)
 
         # 6. Generate todos (planning) with session context
-        logger.divider("PLANNING PHASE", style="cyan")
-        logger.info("planning_phase_started")
+        self.logger.divider("PLANNING PHASE", style="cyan")
+        self.logger.info("planning_phase_started")
         todo_list = self._plan(task_with_context, session_context=session_context)
-        logger.success("planning_phase_completed", todos_count=len(todo_list.todos))
+        self.logger.success("planning_phase_completed", todos_count=len(todo_list.todos))
 
         # 7. Initialize memory with todos
-        logger.divider("MEMORY INITIALIZATION", style="cyan")
+        self.logger.divider("MEMORY INITIALIZATION", style="cyan")
         memory = AgentMemory(todos=todo_list.todos)
-        logger.info("memory_initialized", todos_count=len(memory.todos))
+        self.logger.info("memory_initialized", todos_count=len(memory.todos))
 
         # 8. Create executor with memory and session context
         executor = Executor(
@@ -203,32 +207,43 @@ Instructions:
             memory=memory,
             tools=self.tools,
             session_context=session_context,
+            verbose=self.verbose,
         )
 
         # 9. Execute
-        logger.divider("EXECUTION PHASE", style="cyan")
-        logger.info("execution_phase_started")
+        self.logger.divider("EXECUTION PHASE", style="cyan")
+        self.logger.info("execution_phase_started")
         result = executor.run()
-        logger.success(
+        self.logger.success(
             "execution_phase_completed", total_steps=len(result.state_history)
         )
 
         # 10. Generate final reply
-        logger.divider("SUMMARIZATION PHASE", style="cyan")
-        logger.info("summarization_phase_started")
+        self.logger.divider("SUMMARIZATION PHASE", style="cyan")
+        self.logger.info("summarization_phase_started")
         result.final_reply = self._summarize(task, result)
-        logger.success("summarization_phase_completed")
+        self.logger.success("summarization_phase_completed")
 
         # 11. Cache the reply for future identical requests
         if result.final_reply:
             self._session.cache_reply(normalized_task, result.final_reply)
-            logger.debug(
+            self.logger.debug(
                 "agent_reply_cached",
                 session_id=self.session_id,
                 cache_size=len(self._session.cache),
             )
 
-        logger.divider("AGENT RUN COMPLETED", style="green")
+        self.logger.divider("AGENT RUN COMPLETED", style="green")
+        
+        # Always show final output, even when verbose=False
+        if not self.verbose and result.final_reply:
+            from rich.console import Console
+            from rich.panel import Panel
+            from rich import box
+            console = Console()
+            console.print()
+            console.print(Panel(result.final_reply, title="Result", border_style="green", box=box.ROUNDED))
+            console.print()
 
         return result
 
@@ -242,7 +257,7 @@ Instructions:
         count = len(self._session.cache)
         self._session.cache.clear()
         self._session.last_reply = None
-        logger.info(
+        self.logger.info(
             "agent_cache_cleared", session_id=self.session_id, entries_cleared=count
         )
         return count
@@ -340,7 +355,7 @@ Instructions:
                 # Capitalize first letter for consistency
                 name = name[0].upper() + name[1:] if len(name) > 1 else name.upper()
                 self.session_facts["user_name"] = name
-                logger.debug("session_fact_extracted", fact="user_name", value=name)
+                self.logger.debug("session_fact_extracted", fact="user_name", value=name)
                 break
 
     def _plan(self, task: str, session_context: str = "") -> TodoList:
@@ -424,7 +439,7 @@ IMPORTANT: You must NOT use any tools or function calls. Only provide a direct t
 
         try:
             final_reply = summary_llm.invoke(prompt)
-            logger.info(
+            self.logger.info(
                 "final_reply_generated",
                 reply_preview=(
                     final_reply[:100] + "..." if len(final_reply) > 100 else final_reply
@@ -432,7 +447,7 @@ IMPORTANT: You must NOT use any tools or function calls. Only provide a direct t
             )
             return final_reply
         except Exception as e:
-            logger.error("final_reply_failed", exc=e)
+            self.logger.error("final_reply_failed", exc=e)
             # Fallback: construct a basic reply from the last result
             fallback = self._build_fallback_reply(memory)
             return fallback

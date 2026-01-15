@@ -22,8 +22,6 @@ from utils.llm import LLM
 from utils.logger import get_logger
 from utils.Prompts import get_prompt
 
-logger = get_logger()
-
 
 MAX_STEPS_PER_TODO: int = 25
 RECENT_HISTORY_SIZE: int = 5
@@ -50,12 +48,15 @@ class Executor:
         memory: AgentMemory,
         tools: Dict[str, Callable],
         session_context: str = "",
+        verbose: bool = True,
     ) -> None:
         self._llm = llm
         self._memory = memory
         self._tools = tools
         self._tool_names = frozenset(tools.keys())
         self._session_context = session_context
+        self._verbose = verbose
+        self.logger = get_logger(verbose=verbose)
 
     def run(self) -> AgentMemory:
         """
@@ -70,15 +71,15 @@ class Executor:
         pending_todos = self._get_pending_todos()
 
         if not pending_todos:
-            logger.info("executor_no_pending_todos")
+            self.logger.info("executor_no_pending_todos")
             return self._memory
 
-        logger.divider("EXECUTOR RUN STARTED")
-        logger.info("executor_run_started", pending_todos_count=len(pending_todos))
+        self.logger.divider("EXECUTOR RUN STARTED")
+        self.logger.info("executor_run_started", pending_todos_count=len(pending_todos))
 
         for i, todo in enumerate(pending_todos, 1):
-            logger.divider(f"TODO {i}/{len(pending_todos)}")
-            logger.info(
+            self.logger.divider(f"TODO {i}/{len(pending_todos)}")
+            self.logger.info(
                 "executor_todo_started",
                 todo_id=todo.id,
                 todo_text=todo.todo,
@@ -87,11 +88,11 @@ class Executor:
             try:
                 self._execute_single_todo(todo)
             except Exception as e:
-                logger.error("executor_todo_failed", todo_id=todo.id, exc=e)
+                self.self.logger.error("executor_todo_failed", todo_id=todo.id, exc=e)
                 raise
 
-        logger.divider("EXECUTOR RUN COMPLETED")
-        logger.success(
+        self.logger.divider("EXECUTOR RUN COMPLETED")
+        self.logger.success(
             "executor_run_completed",
             total_todos=len(pending_todos),
             total_steps=len(self._memory.state_history),
@@ -129,10 +130,10 @@ class Executor:
                 action = state.action
 
                 if action == "complete_todo":
-                    logger.divider("TODO COMPLETED", style="green")
+                    self.logger.divider("TODO COMPLETED", style="green")
                     # Use reply if provided, otherwise fall back to thoughts
                     completion_notes = state.reply if state.reply else state.thoughts
-                    logger.success(
+                    self.logger.success(
                         "executor_todo_completed",
                         todo_id=todo.id,
                         steps=steps_taken,
@@ -143,8 +144,8 @@ class Executor:
                     return
 
                 if action == "fail_todo":
-                    logger.divider("TODO FAILED", style="yellow")
-                    logger.warning(
+                    self.logger.divider("TODO FAILED", style="yellow")
+                    self.logger.warning(
                         "executor_todo_failed",
                         todo_id=todo.id,
                         steps=steps_taken,
@@ -157,8 +158,8 @@ class Executor:
                     consecutive_noops += 1
                     if consecutive_noops >= max_consecutive_noops:
                         reason = f"No progress: {consecutive_noops} consecutive noops"
-                        logger.divider("TODO FAILED - NO PROGRESS", style="yellow")
-                        logger.warning(
+                        self.logger.divider("TODO FAILED - NO PROGRESS", style="yellow")
+                        self.logger.warning(
                             "executor_todo_failed_no_progress",
                             todo_id=todo.id,
                             consecutive_noops=consecutive_noops,
@@ -170,7 +171,7 @@ class Executor:
                 consecutive_noops = 0
 
                 if action == "think":
-                    logger.debug(
+                    self.logger.debug(
                         "executor_action_think",
                         step=steps_taken,
                         thought=state.thoughts[:50],
@@ -183,14 +184,14 @@ class Executor:
 
                 raise RuntimeError(f"Unknown action: {action}")
             except Exception as e:
-                logger.error(
+                self.logger.error(
                     "executor_step_failed", todo_id=todo.id, step=steps_taken, exc=e
                 )
                 raise
 
         reason = f"Step limit exceeded: {MAX_STEPS_PER_TODO} steps without completion"
-        logger.divider("TODO FAILED - STEP LIMIT", style="yellow")
-        logger.warning(
+        self.logger.divider("TODO FAILED - STEP LIMIT", style="yellow")
+        self.logger.warning(
             "executor_todo_failed_step_limit",
             todo_id=todo.id,
             max_steps=MAX_STEPS_PER_TODO,
@@ -216,13 +217,13 @@ class Executor:
             raw_response = self._llm.invoke(prompt)
             state = AgentState.model_validate_json(raw_response, strict=True)
         except Exception as e:
-            logger.error("executor_llm_response_invalid", todo_id=todo.id, exc=e)
+            self.logger.error("executor_llm_response_invalid", todo_id=todo.id, exc=e)
             raise RuntimeError(f"Invalid AgentState from LLM: {e}") from e
 
         try:
             self._validate_state(state)
         except Exception as e:
-            logger.error(
+            self.logger.error(
                 "executor_state_validation_failed",
                 todo_id=todo.id,
                 action=state.action,
@@ -273,10 +274,10 @@ class Executor:
         tool_name = state.tool_name
         tool_input = state.tool_input or {}
 
-        logger.divider(f"TOOL CALL: {tool_name.upper()}", style="cyan")
-        logger.info("executor_tool_calling", tool_name=tool_name, tool_input=tool_input)
+        self.logger.divider(f"TOOL CALL: {tool_name.upper()}", style="cyan")
+        self.logger.info("executor_tool_calling", tool_name=tool_name, tool_input=tool_input)
         result = self._execute_tool(tool_name, tool_input)
-        logger.success(
+        self.logger.success(
             "executor_tool_completed", tool_name=tool_name, result=str(result)[:100]
         )
 
@@ -298,7 +299,7 @@ class Executor:
             RuntimeError: If tool doesn't exist or execution fails
         """
         if tool_name not in self._tools:
-            logger.error(
+            self.logger.error(
                 "executor_tool_not_found",
                 tool_name=tool_name,
                 available_tools=list(self._tool_names),
@@ -310,7 +311,7 @@ class Executor:
         try:
             result = tool_fn(**tool_input)
         except TypeError as e:
-            logger.error(
+            self.logger.error(
                 "executor_tool_invalid_args",
                 tool_name=tool_name,
                 tool_input=tool_input,
@@ -318,7 +319,7 @@ class Executor:
             )
             raise RuntimeError(f"Invalid arguments for tool '{tool_name}': {e}") from e
         except Exception as e:
-            logger.error("executor_tool_execution_failed", tool_name=tool_name, exc=e)
+            self.logger.error("executor_tool_execution_failed", tool_name=tool_name, exc=e)
             raise RuntimeError(f"Tool '{tool_name}' execution failed: {e}") from e
 
         if result is None:
