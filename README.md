@@ -1,6 +1,12 @@
 # AgentV2 - Production-Ready Python Agent Framework
 
+[![PyPI version](https://badge.fury.io/py/agentv2.svg)](https://badge.fury.io/py/agentv2)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A modular, production-ready Python framework for building autonomous AI agents that can plan, validate, and execute complex tasks using LLMs and custom tools.
+
+**📦 Install**: `pip install agentv2` | **🔗 PyPI**: [pypi.org/project/agentv2](https://pypi.org/project/agentv2/)
 
 ## 🎯 What is This Project?
 
@@ -14,119 +20,31 @@ AgentV2 is a deterministic, production-grade agent framework that separates conc
 
 The framework enforces strict architectural boundaries, ensuring predictable execution, no silent failures, and deterministic outcomes.
 
-## 🏗️ Architecture & Logic
-
-### High-Level Flow
-
-```mermaid
-graph TD
-    A[User Task] --> B[Agent.run]
-    B --> C[Planner]
-    C --> D[Generate Todos]
-    D --> E[Validator]
-    E --> F{Valid?}
-    F -->|No| G[Auto-Rewrite]
-    G --> E
-    F -->|Yes| H[Executor]
-    H --> I[Execute Todos]
-    I --> J[LLM Proposes Action]
-    J --> K{Action Type}
-    K -->|tool| L[Execute Tool]
-    K -->|complete_todo| M[Mark Complete]
-    K -->|think| N[Update State]
-    L --> O[Update Memory]
-    M --> O
-    N --> O
-    O --> P{All Done?}
-    P -->|No| I
-    P -->|Yes| Q[Summarize]
-    Q --> R[Final Reply]
-```
-
-### Component Responsibilities
-
-```mermaid
-graph LR
-    subgraph "Agent (Orchestrator)"
-        A1[Task Input] --> A2[Plan]
-        A2 --> A3[Validate]
-        A3 --> A4[Execute]
-        A4 --> A5[Summarize]
-    end
-    
-    subgraph "Planner"
-        P1[Task] --> P2[LLM Generate]
-        P2 --> P3[TodoList]
-    end
-    
-    subgraph "Validator"
-        V1[TodoList] --> V2[Base Rules]
-        V2 --> V3[Domain Rules]
-        V3 --> V4[Quality Score]
-        V4 --> V5{Pass?}
-        V5 -->|No| V6[Rewrite]
-        V6 --> V1
-        V5 -->|Yes| V7[Validated]
-    end
-    
-    subgraph "Executor"
-        E1[TodoList] --> E2[Iterate Todos]
-        E2 --> E3[LLM Action]
-        E3 --> E4{Action}
-        E4 -->|tool| E5[Call Tool]
-        E4 -->|complete| E6[Mark Done]
-        E4 -->|think| E7[Update State]
-        E5 --> E8[Update Memory]
-        E6 --> E8
-        E7 --> E8
-        E8 --> E9{Next?}
-        E9 -->|Yes| E2
-        E9 -->|No| E10[Done]
-    end
-    
-    A2 --> P1
-    A3 --> V1
-    A4 --> E1
-    V7 --> A4
-    E10 --> A5
-```
-
-### Session Memory Flow
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant A as Agent
-    participant S as SessionStore
-    participant C as Cache
-    
-    U->>A: chat("What's the weather?")
-    A->>S: get(session_id)
-    S->>C: check_cache(normalized_task)
-    alt Cache Hit
-        C-->>A: cached_reply
-        A-->>U: cached_reply (no LLM call)
-    else Cache Miss
-        A->>A: plan + execute
-        A->>C: cache_reply(task, reply)
-        A-->>U: final_reply
-    end
-```
 
 ## 🚀 Quick Start
 
 ### Installation
+
+**Install from PyPI (Recommended):**
+
+```bash
+pip install agentv2
+```
+
+📦 **Package**: [agentv2 on PyPI](https://pypi.org/project/agentv2/)
+
+**Or install from source (Development):**
 
 ```bash
 # Clone the repository
 git clone <repository-url>
 cd AgentV2
 
-# Install dependencies (using uv)
-uv sync
+# Install in editable mode
+pip install -e .
 
-# Or using pip
-pip install -r requirements.txt
+# Or install with development dependencies
+pip install -e ".[dev]"
 ```
 
 ### Environment Setup
@@ -134,7 +52,7 @@ pip install -r requirements.txt
 Create a `.env` file:
 
 ```env
-GROQ_API_KEY=your_groq_api_key_here
+API_KEY=your_api_key_here
 ```
 
 ### Basic Usage
@@ -412,6 +330,107 @@ The framework uses Rich for beautiful, structured logging:
 - **Todo lists** with status indicators
 - **Structured logs** to files in `logs/` directory
 
+
+
+## 🏗️ Architecture & Logic
+
+### High-Level Flow
+
+```mermaid
+graph TD
+    A[User Task] --> B[Agent.run]
+    B --> C[Planner]
+    C --> D[Generate Todos]
+    D --> E[Validator]
+    E --> F{Valid?}
+    F -->|No| G[Auto-Rewrite]
+    G --> E
+    F -->|Yes| H[Executor]
+    H --> I[Execute Todos]
+    I --> J[LLM Proposes Action]
+    J --> K{Action Type}
+    K -->|tool| L[Execute Tool]
+    K -->|complete_todo| M[Mark Complete]
+    K -->|think| N[Update State]
+    L --> O[Update Memory]
+    M --> O
+    N --> O
+    O --> P{All Done?}
+    P -->|No| I
+    P -->|Yes| Q[Summarize]
+    Q --> R[Final Reply]
+```
+
+### Component Responsibilities
+
+```mermaid
+graph LR
+    subgraph "Agent (Orchestrator)"
+        A1[Task Input] --> A2[Plan]
+        A2 --> A3[Validate]
+        A3 --> A4[Execute]
+        A4 --> A5[Summarize]
+    end
+    
+    subgraph "Planner"
+        P1[Task] --> P2[LLM Generate]
+        P2 --> P3[TodoList]
+    end
+    
+    subgraph "Validator"
+        V1[TodoList] --> V2[Base Rules]
+        V2 --> V3[Domain Rules]
+        V3 --> V4[Quality Score]
+        V4 --> V5{Pass?}
+        V5 -->|No| V6[Rewrite]
+        V6 --> V1
+        V5 -->|Yes| V7[Validated]
+    end
+    
+    subgraph "Executor"
+        E1[TodoList] --> E2[Iterate Todos]
+        E2 --> E3[LLM Action]
+        E3 --> E4{Action}
+        E4 -->|tool| E5[Call Tool]
+        E4 -->|complete| E6[Mark Done]
+        E4 -->|think| E7[Update State]
+        E5 --> E8[Update Memory]
+        E6 --> E8
+        E7 --> E8
+        E8 --> E9{Next?}
+        E9 -->|Yes| E2
+        E9 -->|No| E10[Done]
+    end
+    
+    A2 --> P1
+    A3 --> V1
+    A4 --> E1
+    V7 --> A4
+    E10 --> A5
+```
+
+### Session Memory Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant A as Agent
+    participant S as SessionStore
+    participant C as Cache
+    
+    U->>A: chat("What's the weather?")
+    A->>S: get(session_id)
+    S->>C: check_cache(normalized_task)
+    alt Cache Hit
+        C-->>A: cached_reply
+        A-->>U: cached_reply (no LLM call)
+    else Cache Miss
+        A->>A: plan + execute
+        A->>C: cache_reply(task, reply)
+        A-->>U: final_reply
+    end
+```
+
 ## 🤝 Contributing
 
 This is a production-ready framework with strict architectural constraints. When contributing:
@@ -424,7 +443,7 @@ This is a production-ready framework with strict architectural constraints. When
 
 ## 📄 License
 
-[Add your license here]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
@@ -434,32 +453,5 @@ This is a production-ready framework with strict architectural constraints. When
 
 ---
 
-**Note**: This framework is designed for production use with strict architectural boundaries. Ensure you understand the constraints before extending functionality.
-sequenceDiagram
-    participant User
-    participant Agent
-    participant SessionMemory
-    participant AgentMemory
-    participant Executor
-    participant LLM
-
-    User->>Agent: run("task")
-    Agent->>SessionMemory: get_cached_reply(normalized_task)
-    alt Cache Hit
-        SessionMemory-->>Agent: cached_reply
-        Agent-->>User: AgentMemory(final_reply=cached_reply)
-    else Cache Miss
-        Agent->>AgentMemory: new AgentMemory(todos=...)
-        Agent->>Executor: run(memory)
-        loop For each todo
-            Executor->>LLM: propose action
-            LLM-->>Executor: AgentState
-            Executor->>AgentMemory: append_state(state)
-            Executor->>AgentMemory: update last_tool/result
-            Executor->>AgentMemory: mark todo complete
-        end
-        Executor-->>Agent: updated AgentMemory
-        Agent->>AgentMemory: generate final_reply
-        Agent->>SessionMemory: cache_reply(task, reply)
-        Agent-->>User: AgentMemory with final_reply
-    end
+Made With **Hate** and **Love**
+Because perfection isn't born out of love, it's forged in frustration, obsession, and an unrelenting pursuit of something better.
