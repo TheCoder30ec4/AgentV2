@@ -9,8 +9,6 @@ from utils.validators import (MIN_TODO_SCORE, DomainTodoValidator,
                               validate_and_rewrite_with_domain,
                               validate_score_and_rewrite, validate_todo_list)
 
-logger = get_logger()
-
 
 class Planner(LLM):
     """
@@ -30,6 +28,11 @@ class Planner(LLM):
     - Domain rules remain enforced
     - Planner quality is measurable
     """
+    
+    def __init__(self, model: str, system_prompt: str, api_base: Optional[str] = None, verbose: bool = True):
+        super().__init__(model=model, system_prompt=system_prompt, api_base=api_base)
+        self.verbose = verbose
+        self.logger = get_logger(verbose=verbose)
 
     def _generate_todos(
         self,
@@ -57,7 +60,7 @@ class Planner(LLM):
         Raises:
             ValueError: If todos cannot be validated/repaired
         """
-        logger.info(
+        self.logger.info(
             "planner_generating_todos",
             task_preview=task[:80] + "..." if len(task) > 80 else task,
         )
@@ -71,14 +74,14 @@ class Planner(LLM):
 
         # Get LLM response as TodoListInput (without ids)
         input_response = self.invoke(prompt, TodoListInput)
-        logger.debug(
+        self.logger.debug(
             "planner_llm_response_received", todos_count=len(input_response.todos)
         )
 
         if auto_rewrite:
             if use_scoring:
                 # Full pipeline: validate + score + domain + rewrite
-                logger.info("planner_validating_with_scoring", min_score=min_score)
+                self.logger.info("planner_validating_with_scoring", min_score=min_score)
                 validated_todos = validate_score_and_rewrite(
                     llm=self,
                     todos=input_response.todos,
@@ -87,7 +90,7 @@ class Planner(LLM):
                 )
             elif domain_validator:
                 # Validate with domain rules + rewrite (no scoring)
-                logger.info("planner_validating_with_domain")
+                self.logger.info("planner_validating_with_domain")
                 validated_todos = validate_and_rewrite_with_domain(
                     llm=self,
                     todos=input_response.todos,
@@ -95,13 +98,13 @@ class Planner(LLM):
                 )
             else:
                 # Base validation + rewrite only
-                logger.info("planner_validating_base")
+                self.logger.info("planner_validating_base")
                 validated_todos = validate_and_rewrite_todos(self, input_response.todos)
 
             input_response = TodoListInput(todos=validated_todos)
         else:
             # Strict validation only - no rewriting
-            logger.info("planner_validating_strict")
+            self.logger.info("planner_validating_strict")
             validate_todo_list(input_response.todos)
 
         # Convert to TodoList with generated UUID4 ids
@@ -109,7 +112,7 @@ class Planner(LLM):
 
         # Log quality score for observability
         avg_score = score_todo_list(input_response.todos)
-        logger.success(
+        self.logger.success(
             "planner_todos_generated",
             todos_count=len(todo_list.todos),
             avg_score=avg_score,
