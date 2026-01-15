@@ -232,7 +232,6 @@ Instructions:
 
         # 11. Cache the reply for future identical requests
         if result.final_reply:
-            logger.debug(
             self._session.cache_reply(task, result.final_reply)
             self.logger.debug(
                 "agent_reply_cached",
