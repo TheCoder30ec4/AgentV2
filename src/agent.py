@@ -3,7 +3,7 @@ import re
 from typing import Callable, Dict, Optional
 
 from schemas.AgentMemory import AgentMemory
-from schemas.SessionMemory import SessionMemory
+from schemas.SessionMemory import SessionMemory, normalize_task
 from schemas.TodoSchema import TodoList
 from src.executor import Executor
 from src.planner import Planner
@@ -134,8 +134,15 @@ Instructions:
         # 3. Run the agent
         result = self.run(task)
 
-        # 4. Return the final reply (or fallback)
-        return result.final_reply or self._build_fallback_reply(result)
+        # 4. Get the final reply (or fallback)
+        final_reply = result.final_reply or self._build_fallback_reply(result)
+        
+        # 5. Store conversation history (user question + agent reply)
+        if final_reply:
+            self._session.add_conversation_entry(user_text, final_reply)
+        
+        # 6. Return the final reply
+        return final_reply
 
     def run(self, task: str) -> AgentMemory:
         """
@@ -150,20 +157,24 @@ Instructions:
           → Cache reply
           → Return
         """
-        # 1. Normalize task for cache lookup
-        normalized_task = self._normalize_task(task)
-
-        # 2. Check cache - if exact match, return immediately (no LLM calls)
-        cached_reply = self._session.get_cached_reply(normalized_task)
+        # 1. Check cache - if exact match, return immediately (no LLM calls)
+        # Note: get_cached_reply normalizes the task internally
+        cached_reply = self._session.get_cached_reply(task)
         if cached_reply is not None:
+<<<<<<< Updated upstream
             logger.divider("CACHE HIT", style="green")
             logger.success(
+=======
+            self.logger.divider("CACHE HIT", style="green")
+            normalized_task_str = normalize_task(task)
+            self.logger.success(
+>>>>>>> Stashed changes
                 "agent_cache_hit",
                 session_id=self.session_id,
                 task_preview=(
-                    normalized_task[:50] + "..."
-                    if len(normalized_task) > 50
-                    else normalized_task
+                    normalized_task_str[:50] + "..."
+                    if len(normalized_task_str) > 50
+                    else normalized_task_str
                 ),
             )
 
@@ -221,8 +232,13 @@ Instructions:
 
         # 11. Cache the reply for future identical requests
         if result.final_reply:
+<<<<<<< Updated upstream
             self._session.cache_reply(normalized_task, result.final_reply)
             logger.debug(
+=======
+            self._session.cache_reply(task, result.final_reply)
+            self.logger.debug(
+>>>>>>> Stashed changes
                 "agent_reply_cached",
                 session_id=self.session_id,
                 cache_size=len(self._session.cache),
@@ -292,6 +308,7 @@ Instructions:
         Includes:
         - Session ID
         - Session facts (e.g., user_name)
+        - Conversation history (previous Q&A pairs)
         - Last reply snippet (for continuity)
         - Cache information (number of cached items)
 
@@ -308,7 +325,17 @@ Instructions:
             facts_str = ", ".join(f"{k}={v}" for k, v in self.session_facts.items())
             context_parts.append(f"Known Facts: {facts_str}")
 
-        # Last reply for continuity
+        # Conversation history (previous questions and answers)
+        conversation_history = self._session.get_conversation_history()
+        if conversation_history:
+            history_lines = []
+            for i, entry in enumerate(conversation_history, 1):
+                history_lines.append(f"Q{i}: {entry.question}")
+                history_lines.append(f"A{i}: {entry.answer}")
+            context_parts.append("Previous Conversation:")
+            context_parts.append("\n".join(history_lines))
+
+        # Last reply for continuity (backward compatibility)
         if self._session.last_reply:
             context_parts.append(f"Last Response: {self._session.last_reply}")
 
@@ -465,3 +492,4 @@ IMPORTANT: You must NOT use any tools or function calls. Only provide a direct t
             return f"Task execution encountered {failed_count} failure(s). Please check the logs for details."
 
         return "Task completed."
+        
